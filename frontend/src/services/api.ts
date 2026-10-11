@@ -80,6 +80,7 @@ export const api = {
       sender_or_source?: string;
     }>;
     user_notes?: string;
+    consent_to_analyze?: boolean;
   }): Promise<SubmissionResponse> {
     return request<SubmissionResponse>('/submit', {
       method: 'POST',
@@ -124,10 +125,30 @@ export const api = {
     });
   },
 
+  async deleteCase(caseId: number): Promise<{ message: string }> {
+    return request<{ message: string }>(`/cases/${caseId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async updateCaseLanguage(caseId: number, language: string): Promise<CaseDetail> {
+    return request<CaseDetail>(`/cases/${caseId}/language?language=${encodeURIComponent(language)}`, {
+      method: 'PATCH',
+    });
+  },
+
   // Graph
   async getGraph(caseId?: number): Promise<GraphResponse> {
     const qs = caseId ? `?case_id=${caseId}` : '';
     return request<GraphResponse>(`/graph${qs}`);
+  },
+
+  // Auth
+  async firebaseLogin(idToken: string): Promise<any> {
+    return request('/auth/firebase-login', {
+      method: 'POST',
+      body: JSON.stringify({ id_token: idToken }),
+    });
   },
 
   // Auth

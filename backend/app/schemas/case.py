@@ -55,6 +55,8 @@ class CaseSummary(BaseModel):
     risk_score: float
     uncertainty_level: str
     primary_threat_type: str
+    source_language: str = "en"
+    owner_id: Optional[int] = None
     indicator_count: int
     evidence_count: int
     created_at: datetime
@@ -75,9 +77,14 @@ class CaseDetail(BaseModel):
     confidence_score: float
     reporter_notes: Optional[str] = None
     safe_recommendations: List[str]
+    source_language: str = "en"
+    language_confidence: float = 1.0
+    translations: dict[str, str] = {}
+    owner_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
     evidences: List[EvidenceSchema]
     indicators: List[DetectionIndicatorSchema]
     notes: List[AnalystNoteResponse]
     review_actions: List[CaseReviewActionResponse]
+

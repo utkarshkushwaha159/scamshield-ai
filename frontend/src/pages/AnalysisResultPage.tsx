@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ShieldAlert,
   CheckCircle2,
@@ -9,7 +9,10 @@ import {
   ArrowLeft,
   Loader2,
   FileText,
-  Search
+  Search,
+  Globe,
+  PhoneCall,
+  Trash2
 } from 'lucide-react';
 
 import { api } from '../services/api';
@@ -18,11 +21,15 @@ import { RiskBadge } from '../components/RiskBadge';
 import { StatusBadge } from '../components/StatusBadge';
 
 export const AnalysisResultPage: React.FC = () => {
+  const navigate = useNavigate();
   const { caseRef } = useParams<{ caseRef: string }>();
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [activeEvidenceView, setActiveEvidenceView] = useState<'original' | 'translation'>('original');
+  const [selectedTranslationLang, setSelectedTranslationLang] = useState<'en' | 'hi' | 'bn'>('en');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (!caseRef) return;
@@ -47,12 +54,38 @@ export const AnalysisResultPage: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleDeleteCase = async () => {
+    if (!caseData) return;
+    const confirmed = window.confirm(
+      'Are you sure you want to permanently delete this report? This satisfies your privacy deletion rights and permanently purges records.'
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsDeleting(true);
+      await api.deleteCase(caseData.id);
+      // Remove from local storage history
+      const existingHistory: string[] = JSON.parse(
+        localStorage.getItem('scamshield_submitted_cases') || '[]'
+      );
+      const filtered = existingHistory.filter((ref) => ref !== caseData.case_reference);
+      localStorage.setItem('scamshield_submitted_cases', JSON.stringify(filtered));
+
+      alert('Case successfully purged from database.');
+      navigate('/history');
+    } catch (err: any) {
+      alert(`Deletion failed: ${err.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '5rem 0' }}>
         <Loader2 size={36} className="spin" style={{ color: 'var(--brand-cyan)', margin: '0 auto 1rem auto' }} />
         <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Analyzing Evidence &amp; Correlating Graph...</h2>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Evaluating deterministic rules and indicators...</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Evaluating deterministic rules, language signals, and indicators...</p>
       </div>
     );
   }
@@ -72,19 +105,60 @@ export const AnalysisResultPage: React.FC = () => {
     );
   }
 
+  const isHighRisk = caseData.risk_category === 'high' || caseData.risk_category === 'critical';
+
   return (
     <div style={{ maxWidth: '980px', margin: '0 auto' }}>
       {/* Top Bar Navigation */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <Link to="/submit" className="btn btn-outline" style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
-          <ArrowLeft size={14} />
-          Submit Another
-        </Link>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <Link to="/submit" className="btn btn-outline" style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
+            <ArrowLeft size={14} />
+            Submit Another
+          </Link>
+          <button
+            type="button"
+            onClick={handleDeleteCase}
+            disabled={isDeleting}
+            className="btn btn-outline"
+            style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+            title="Permanently purge this report per privacy data deletion rights"
+          >
+            <Trash2 size={13} />
+            {isDeleting ? 'Purging...' : 'Delete Report (Privacy Purge)'}
+          </button>
+        </div>
+
         <Link to={`/investigate/${caseData.id}`} className="btn btn-secondary" style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
           <Search size={14} />
           Open in Analyst Workspace &rarr;
         </Link>
       </div>
+
+      {/* High-Risk 1930 Emergency Helpline Box */}
+      {isHighRisk && (
+        <div className="notice" style={{ backgroundColor: 'rgba(239, 68, 68, 0.12)', borderColor: 'rgba(239, 68, 68, 0.5)', marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <PhoneCall size={24} color="#f87171" style={{ flexShrink: 0 }} />
+            <div>
+              <strong style={{ color: '#f87171', fontSize: '1rem' }}>
+                Suspected Financial Fraud Workflow Detected
+              </strong>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.15rem' }}>
+                If money was transferred or an unauthorized collect request approved, immediately contact the National Cyber Fraud Helpline at <strong>1930</strong> to initiate account/UPI freeze.
+              </div>
+            </div>
+          </div>
+          <a
+            href="tel:1930"
+            className="btn btn-primary"
+            style={{ backgroundColor: '#ef4444', borderColor: '#ef4444', color: '#fff', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}
+          >
+            <PhoneCall size={16} />
+            Call 1930 Helpline
+          </a>
+        </div>
+      )}
 
       {/* Case Header Card */}
       <div className="card" style={{ marginBottom: '1.75rem', position: 'relative' }}>
@@ -239,36 +313,50 @@ export const AnalysisResultPage: React.FC = () => {
                 <tr>
                   <th>Rule ID</th>
                   <th>Detection Rule</th>
+                  <th>Category</th>
                   <th>Severity</th>
-                  <th>Contribution</th>
-                  <th>Matched Pattern</th>
+                  <th>Weight</th>
+                  <th>Observed Match / Explanation</th>
                 </tr>
               </thead>
               <tbody>
                 {caseData.indicators.map((ind, idx) => (
                   <tr key={idx}>
-                    <td className="mono" style={{ fontSize: '0.8rem', color: 'var(--brand-cyan)' }}>
-                      {ind.rule_id}
+                    <td>
+                      <span className="mono" style={{ fontSize: '0.8rem', color: 'var(--brand-cyan)' }}>
+                        {ind.rule_id}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: 600 }}>{ind.rule_name}</td>
+                    <td>
+                      <span className="badge" style={{ backgroundColor: 'var(--bg-surface-elevated)' }}>
+                        {ind.category}
+                      </span>
                     </td>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{ind.rule_name}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                        {ind.explanation}
-                      </div>
+                      <span
+                        className="badge"
+                        style={{
+                          backgroundColor:
+                            ind.severity === 'critical' ? 'rgba(220, 38, 38, 0.2)' :
+                            ind.severity === 'high' ? 'rgba(239, 68, 68, 0.2)' :
+                            ind.severity === 'medium' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+                          color:
+                            ind.severity === 'critical' ? '#f87171' :
+                            ind.severity === 'high' ? '#ef4444' :
+                            ind.severity === 'medium' ? '#fbbf24' : '#34d399',
+                        }}
+                      >
+                        {ind.severity.toUpperCase()}
+                      </span>
                     </td>
-                    <td>
-                      <RiskBadge category={ind.severity} showScore={false} />
-                    </td>
-                    <td className="mono" style={{ fontWeight: 700, color: '#f59e0b' }}>
-                      +{ind.score_contribution.toFixed(1)}
-                    </td>
-                    <td style={{ fontSize: '0.8rem', maxWidth: '220px' }}>
-                      {ind.matched_value ? (
-                        <span style={{ backgroundColor: 'var(--bg-app)', padding: '0.2rem 0.4rem', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
-                          &ldquo;{ind.matched_value}&rdquo;
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)' }}>&mdash;</span>
+                    <td className="mono" style={{ fontWeight: 700 }}>+{ind.score_contribution.toFixed(1)}</td>
+                    <td style={{ fontSize: '0.85rem' }}>
+                      <div>{ind.explanation}</div>
+                      {ind.matched_value && (
+                        <div className="mono" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                          Matched: "{ind.matched_value}"
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -279,14 +367,66 @@ export const AnalysisResultPage: React.FC = () => {
         )}
       </div>
 
-      {/* Submitted Evidence Records */}
+      {/* Multilingual Evidence Inspection (Original Unicode vs Translation) */}
       <div className="card">
-        <div className="card-header">
-          <span className="card-title">
-            <FileText size={18} color="var(--text-secondary)" />
-            Submitted Evidence Items ({caseData.evidences.length})
-          </span>
+        <div className="card-header" style={{ flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div>
+            <span className="card-title">
+              <FileText size={18} color="var(--text-secondary)" />
+              Submitted Evidence ({caseData.evidences.length} Items)
+            </span>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+              Detected Input Language: <strong style={{ color: 'var(--text-primary)', textTransform: 'uppercase' }}>{caseData.source_language || 'EN'}</strong> (Confidence: {((caseData.language_confidence || 1.0) * 100).toFixed(0)}%)
+            </div>
+          </div>
+
+          {/* Toggle between Original and Machine Translation */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ display: 'inline-flex', backgroundColor: 'var(--bg-app)', padding: '0.2rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+              <button
+                type="button"
+                onClick={() => setActiveEvidenceView('original')}
+                className={`btn ${activeEvidenceView === 'original' ? 'btn-primary' : 'btn-outline'}`}
+                style={{ padding: '0.25rem 0.65rem', fontSize: '0.75rem', border: 'none' }}
+              >
+                Original (Unmodified Unicode)
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveEvidenceView('translation')}
+                className={`btn ${activeEvidenceView === 'translation' ? 'btn-primary' : 'btn-outline'}`}
+                style={{ padding: '0.25rem 0.65rem', fontSize: '0.75rem', border: 'none' }}
+              >
+                Machine Translation
+              </button>
+            </div>
+
+            {activeEvidenceView === 'translation' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <Globe size={14} color="var(--text-muted)" />
+                <select
+                  value={selectedTranslationLang}
+                  onChange={(e) => setSelectedTranslationLang(e.target.value as any)}
+                  className="form-control"
+                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', width: 'auto' }}
+                  title="Target Translation Language"
+                >
+                  <option value="en">English (EN)</option>
+                  <option value="hi">Hindi (HI)</option>
+                  <option value="bn">Bengali (BN)</option>
+                </select>
+              </div>
+            )}
+          </div>
         </div>
+
+        {activeEvidenceView === 'translation' && (
+          <div className="notice" style={{ backgroundColor: 'var(--bg-surface-elevated)', borderLeft: '3px solid var(--brand-cyan)', marginBottom: '1rem', fontSize: '0.8rem' }}>
+            <strong>Translation Notice: </strong>
+            Machine translation is generated for analyst and admin reading convenience. Original Unicode evidence is preserved intact and never overwritten.
+          </div>
+        )}
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {caseData.evidences.map((ev, idx) => (
             <div
@@ -300,7 +440,17 @@ export const AnalysisResultPage: React.FC = () => {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 <span>Channel: <strong style={{ color: 'var(--text-primary)', textTransform: 'uppercase' }}>{ev.evidence_type}</strong></span>
-                <span>ID: #{ev.id}</span>
+                <span>
+                  {activeEvidenceView === 'original' ? (
+                    <span className="badge" style={{ backgroundColor: 'rgba(56, 189, 248, 0.15)', color: 'var(--brand-cyan)' }}>
+                      Preserved Original
+                    </span>
+                  ) : (
+                    <span className="badge" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
+                      Machine Translated ({selectedTranslationLang.toUpperCase()})
+                    </span>
+                  )}
+                </span>
               </div>
               <pre
                 style={{
@@ -308,10 +458,15 @@ export const AnalysisResultPage: React.FC = () => {
                   color: 'var(--text-primary)',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
-                  fontFamily: 'inherit'
+                  fontFamily: 'inherit',
+                  lineHeight: 1.5
                 }}
               >
-                {ev.raw_content}
+                {activeEvidenceView === 'original'
+                  ? ev.raw_content
+                  : (caseData.translations && caseData.translations[selectedTranslationLang])
+                  ? caseData.translations[selectedTranslationLang]
+                  : ev.raw_content}
               </pre>
             </div>
           ))}

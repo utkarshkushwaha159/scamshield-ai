@@ -104,28 +104,28 @@ def extract_entities(text: str) -> Dict[str, Any]:
 
     # 6. Flag triggers for specific high-risk scam patterns
     # OTP / PIN requests (check for negative qualifiers like 'do not share' or 'never share')
-    has_negative_qualifier = bool(re.search(r"\b(do\s*not\s*share|never\s*share|don'?t\s*share|not\s*to\s*be\s*shared|nobody|bank\s*never\s*asks)\b", lower_text))
+    has_negative_qualifier = bool(re.search(r"\b(do\s*not\s*share|never\s*share|don'?t\s*share|not\s*to\s*be\s*shared|nobody|bank\s*never\s*asks|kisi\s*ko\s*na\s*dein)\b", lower_text))
     if not has_negative_qualifier and \
-       re.search(r"\b(otp|pin|cvv|mpin|password|passcode|secret\s*code|atm\s*pin)\b", lower_text) and \
-       re.search(r"\b(share|send|enter|verify|provide|forward|give|fill|submit)\b", lower_text):
+       re.search(r"\b(otp|pin|cvv|mpin|password|passcode|secret\s*code|atm\s*pin|पिन|ओटीपी)\b", lower_text) and \
+       re.search(r"\b(share|send|enter|verify|provide|forward|give|fill|submit|batao|bhejo|dalo|darj|साझा|दर्ज)\b", lower_text):
         entities["has_otp_pin_request"] = True
 
-
     # UPI collect / reverse charge scam pattern
-    if re.search(r"\b(collect|request|receive|accept|approve|claim|refund|cashback|reward)\b", lower_text) and \
-       re.search(r"\b(pin|enter\s*pin|pay|upi\s*pin|approve\s*request|click\s*pay)\b", lower_text):
+    if re.search(r"\b(collect|request|receive|accept|approve|claim|refund|cashback|reward|paise|paisa|lene|inam|रिफंड|पैसे)\b", lower_text) and \
+       re.search(r"\b(pin|enter\s*pin|pay|upi\s*pin|approve\s*request|click\s*pay|pin\s*dalo|pin\s*enter|पिन\s*दर्ज)\b", lower_text):
         entities["has_collect_request"] = True
 
     # Time urgency
-    if re.search(r"\b(within\s*\d+\s*(?:mins?|minutes?|hours?)|immediate(?:ly)?|urgent(?:ly)?|24\s*hours|expire(?:s|d)?\s*today|block(?:ed)?\s*within|disconnect(?:ed)?\s*tonight)\b", lower_text):
+    if re.search(r"\b(within\s*\d+\s*(?:mins?|minutes?|hours?)|immediate(?:ly)?|urgent(?:ly)?|24\s*hours|expire(?:s|d)?\s*today|block(?:ed)?\s*within|disconnect(?:ed)?\s*tonight|turant|aaj\s*raat|band\s*ho\s*jayega|कट\s*जाएगी|तुरंत|बंद\s*हो\s*जाएगा)\b", lower_text):
         entities["has_urgency"] = True
 
     # APK file download
-    if re.search(r"\.apk\b|download\s*(?:our)?\s*app|install\s*(?:the)?\s*(?:support|banking|kyc)\s*app", lower_text):
+    if re.search(r"\.apk\b|download\s*(?:our)?\s*app|install\s*(?:the)?\s*(?:support|banking|kyc)\s*app|app\s*download|डाउनलोड", lower_text):
         entities["has_apk_download"] = True
 
     # Impersonation triggers
-    if re.search(r"\b(sbi|hdfc|icici|axis|punjab\s*national|paytm|phonepe|gpay|google\s*pay|electricity\s*department|bses|tneb|wbbsedcl|dhbvn|customer\s*care|bank\s*officer|kyc\s*update)\b", lower_text):
+    if re.search(r"\b(sbi|hdfc|icici|axis|punjab\s*national|paytm|phonepe|gpay|google\s*pay|electricity\s*department|bses|tneb|wbbsedcl|dhbvn|customer\s*care|bank\s*officer|kyc\s*update|bank\s*account|bijli|bijlee|বিদ্যুৎ|ব্যাংক|बिजली|बैंक\s*खाता)\b", lower_text):
         entities["has_impersonation"] = True
 
     return entities
+

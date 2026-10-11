@@ -4,6 +4,8 @@ from app.models.evidence import Evidence
 from app.models.detection import DetectionIndicator
 from app.models.correlation import EvidenceRelationship
 from app.models.audit import AuditEvent
+from app.models.translation import TranslationCache
+from app.models.threat_intel import ThreatIntelFeed
 
 __all__ = [
     "User",
@@ -14,4 +16,6 @@ __all__ = [
     "DetectionIndicator",
     "EvidenceRelationship",
     "AuditEvent",
+    "TranslationCache",
+    "ThreatIntelFeed",
 ]

@@ -21,8 +21,14 @@ class Case(Base):
     confidence_score = Column(Float, default=0.5, nullable=False)  # 0.0 to 1.0
     reporter_notes = Column(Text, nullable=True)
     safe_recommendations = Column(Text, nullable=True)  # JSON-encoded array of safe action strings
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    source_language = Column(String(20), default="en", nullable=False)
+    language_confidence = Column(Float, default=1.0, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    owner = relationship("User", foreign_keys=[owner_id])
+
 
     # Relationships
     evidences = relationship("Evidence", back_populates="case", cascade="all, delete-orphan")

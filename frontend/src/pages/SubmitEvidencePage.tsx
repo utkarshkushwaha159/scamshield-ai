@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ShieldAlert,
   Plus,
@@ -8,9 +9,11 @@ import {
   AlertCircle,
   Sparkles,
   Send,
-  Loader2
+  Loader2,
+  PhoneCall,
+  Globe,
+  CheckCircle2
 } from 'lucide-react';
-
 import { api } from '../services/api';
 
 interface EvidenceDraft {
@@ -21,21 +24,28 @@ interface EvidenceDraft {
 
 const PRESET_SCENARIOS = [
   {
-    label: 'Reverse UPI Collect Scam',
+    label: 'Reverse UPI Collect (Hinglish/English)',
     type: 'payment_interaction',
     sender: 'PhonePe Refund Desk',
     content: 'Sir your payment of Rs 3,500 failed. Open your Google Pay / PhonePe app and approve the collect request sent by refund.agent42@ybl and enter your UPI PIN to receive the money immediately back into your account.',
     notes: 'Received an unsolicited call after ordering food online.',
   },
   {
-    label: 'Electricity Disconnection Threat',
+    label: 'बिजली कनेक्शन चेतावनी (Hindi)',
     type: 'sms',
     sender: 'SMS-9876543210',
-    content: 'Dear consumer electricity power will disconnect tonight at 9:30 PM from the power office because your previous month bill was not updated. Please call officer immediately at 9876543210. Discom Helpline.',
-    notes: 'Urgent evening SMS threatening power outage.',
+    content: 'प्रिय उपभोक्ता, आपका बिजली कनेक्शन आज रात 9:30 बजे बिजली कार्यालय से काट दिया जाएगा क्योंकि पिछले महीने का बिल अपडेट नहीं था। कृपया तुरंत अधिकारी 9876543210 पर संपर्क करें।',
+    notes: 'Urgent evening SMS threatening electricity disconnection.',
   },
   {
-    label: 'AnyDesk Support Takeover',
+    label: 'এসবিআই অ্যাকাউন্ট ব্লক নোটিশ (Bengali)',
+    type: 'sms',
+    sender: 'VK-SBISEC',
+    content: 'প্রিয় গ্রাহক, আপনার এসবিআই ব্যাঙ্ক অ্যাকাউন্ট অস্থায়ীভাবে স্থগিত করা হয়েছে। অবিলম্বে প্যান কার্ড এবং কেওয়াইসি আপডেট করতে এই লিঙ্কে ক্লিক করুন: http://sbi-kyc-verify-portal.in',
+    notes: 'Deceptive phishing SMS received in Bengali.',
+  },
+  {
+    label: 'AnyDesk Support Takeover (English)',
     type: 'payment_interaction',
     sender: '+919123456789',
     content: 'Caller stated he was SBI fraud department checking unauthorized transaction of Rs 15,000. He instructed me to download AnyDesk from Play Store and provide the 9 digit address number to verify my bank device identity.',
@@ -51,11 +61,13 @@ const PRESET_SCENARIOS = [
 ];
 
 export const SubmitEvidencePage: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [evidenceItems, setEvidenceItems] = useState<EvidenceDraft[]>([
     { evidence_type: 'payment_interaction', content: '', sender_or_source: '' },
   ]);
   const [userNotes, setUserNotes] = useState('');
+  const [consentGiven, setConsentGiven] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,7 +105,11 @@ export const SubmitEvidencePage: React.FC = () => {
     e.preventDefault();
     setError(null);
 
-    // Validation
+    if (!consentGiven) {
+      setError('Please provide explicit consent to voluntarily submit and analyze this interaction.');
+      return;
+    }
+
     const emptyItem = evidenceItems.find((it) => it.content.trim().length < 5);
     if (emptyItem) {
       setError('Please provide at least 5 characters for each submitted evidence item.');
@@ -109,6 +125,7 @@ export const SubmitEvidencePage: React.FC = () => {
           sender_or_source: it.sender_or_source.trim() || undefined,
         })),
         user_notes: userNotes.trim() || undefined,
+        consent_to_analyze: true
       });
 
       // Save reference to local history
@@ -123,7 +140,6 @@ export const SubmitEvidencePage: React.FC = () => {
         );
       }
 
-      // Navigate to detailed results
       navigate(`/analysis/${response.case_reference}`);
     } catch (err: any) {
       setError(err.message || 'Submission failed. Please check inputs and try again.');
@@ -133,25 +149,50 @@ export const SubmitEvidencePage: React.FC = () => {
   };
 
   return (
-    <div style={{ maxWidth: '880px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '900px', margin: '0 auto' }}>
       <div style={{ marginBottom: '1.75rem' }}>
         <h1 style={{ fontSize: '1.85rem', fontWeight: 800, marginBottom: '0.4rem' }}>
-          Submit Suspicious Evidence
+          {t('submit.title')}
         </h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-          Voluntarily submit suspicious payment requests, deceptive messages, URLs, or caller instructions.
-          Our deterministic engine will analyze the indicators and provide an explainable risk breakdown.
+          {t('submit.subtitle')}
         </p>
       </div>
 
+      {/* 1930 Helpline Alert Banner */}
+      <div className="notice" style={{ backgroundColor: 'rgba(239, 68, 68, 0.08)', borderColor: 'rgba(239, 68, 68, 0.3)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <PhoneCall size={20} color="#f87171" style={{ flexShrink: 0 }} />
+          <div>
+            <strong style={{ color: '#f87171', display: 'block' }}>{t('helpline.banner')}</strong>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('helpline.note')}</span>
+          </div>
+        </div>
+        <a
+          href="tel:1930"
+          className="btn btn-outline"
+          style={{ borderColor: '#f87171', color: '#f87171', fontSize: '0.85rem', padding: '0.4rem 0.9rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+        >
+          <PhoneCall size={14} />
+          {t('helpline.callBtn')}
+        </a>
+      </div>
+
       {/* Safety Notice Banner */}
-      <div className="notice notice-warning" style={{ alignItems: 'center' }}>
+      <div className="notice notice-warning" style={{ alignItems: 'center', marginBottom: '1.5rem' }}>
         <Lock size={20} color="#f59e0b" style={{ flexShrink: 0 }} />
         <div>
-          <strong style={{ color: '#fbbf24' }}>Privacy &amp; Security Rule: </strong>
-          Never share your OTP, ATM PIN, UPI MPIN, or banking passwords. ScamShield AI only analyzes
-          communication patterns and never requests payment credentials.
+          <strong style={{ color: '#fbbf24' }}>Privacy Rule: </strong>
+          {t('submit.privacyWarning')}
         </div>
+      </div>
+
+      {/* Multilingual Tip */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', padding: '0.6rem 0.9rem', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+        <Globe size={16} color="var(--brand-cyan)" />
+        <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+          {t('submit.multilingualTip')}
+        </span>
       </div>
 
       {/* Quick Scenario Fill Buttons for Evaluators */}
@@ -159,7 +200,7 @@ export const SubmitEvidencePage: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
           <Sparkles size={16} color="var(--brand-cyan)" />
           <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-            Demonstration Presets (Click to autofill known scam &amp; legitimate test cases)
+            Evaluation Presets (Multilingual &amp; Common Financial Modus Operandi)
           </span>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
@@ -190,7 +231,7 @@ export const SubmitEvidencePage: React.FC = () => {
             <div className="card-header">
               <span className="card-title" style={{ fontSize: '0.95rem' }}>
                 <ShieldAlert size={16} color="var(--brand-cyan)" />
-                Evidence Item #{idx + 1}
+                {t('submit.evidenceType')} #{idx + 1}
               </span>
               {evidenceItems.length > 1 && (
                 <button
@@ -207,7 +248,7 @@ export const SubmitEvidencePage: React.FC = () => {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Evidence Channel</label>
+                <label className="form-label">{t('submit.evidenceType')}</label>
                 <select
                   className="form-control"
                   value={item.evidence_type}
@@ -222,11 +263,11 @@ export const SubmitEvidencePage: React.FC = () => {
               </div>
 
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Sender / Origin Contact (Optional)</label>
+                <label className="form-label">{t('submit.sender')}</label>
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="e.g. +919876543210, SMS-SBIBNK, or unknown"
+                  placeholder={t('submit.senderPlaceholder')}
                   value={item.sender_or_source}
                   onChange={(e) => handleUpdateItem(idx, 'sender_or_source', e.target.value)}
                 />
@@ -235,11 +276,11 @@ export const SubmitEvidencePage: React.FC = () => {
 
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label">
-                Content or Description <span style={{ color: '#ef4444' }}>*</span>
+                {t('submit.content')} <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <textarea
                 className="form-control"
-                placeholder="Paste the exact text received, URL link, or describe what the caller/interaction demanded..."
+                placeholder={t('submit.contentPlaceholder')}
                 rows={4}
                 value={item.content}
                 onChange={(e) => handleUpdateItem(idx, 'content', e.target.value)}
@@ -266,17 +307,33 @@ export const SubmitEvidencePage: React.FC = () => {
           </button>
         </div>
 
-        <div className="card" style={{ marginBottom: '2rem' }}>
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Optional Context / Reporter Notes</label>
+            <label className="form-label">{t('submit.notes')}</label>
             <textarea
               className="form-control"
-              placeholder="Any context? (e.g. 'I was selling an item on OLX when the buyer sent this collect request...')"
+              placeholder={t('submit.notesPlaceholder')}
               rows={2}
               value={userNotes}
               onChange={(e) => setUserNotes(e.target.value)}
             />
           </div>
+        </div>
+
+        {/* User Consent Checkbox */}
+        <div className="card" style={{ marginBottom: '2rem', backgroundColor: 'var(--bg-surface-elevated)' }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', margin: 0 }}>
+            <input
+              type="checkbox"
+              checked={consentGiven}
+              onChange={(e) => setConsentGiven(e.target.checked)}
+              style={{ marginTop: '0.25rem', width: '16px', height: '16px', accentColor: 'var(--brand-cyan)' }}
+            />
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>
+              <CheckCircle2 size={14} color="#10b981" style={{ display: 'inline', marginRight: '0.35rem', verticalAlign: 'middle' }} />
+              {t('submit.consentLabel')}
+            </span>
+          </label>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
@@ -289,12 +346,12 @@ export const SubmitEvidencePage: React.FC = () => {
             {isSubmitting ? (
               <>
                 <Loader2 size={18} className="spin" />
-                Analyzing Indicators...
+                {t('submit.analyzingBtn')}
               </>
             ) : (
               <>
                 <Send size={18} />
-                Analyze &amp; Generate Case
+                {t('submit.analyzeBtn')}
               </>
             )}
           </button>

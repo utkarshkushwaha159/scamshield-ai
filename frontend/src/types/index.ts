@@ -80,6 +80,10 @@ export interface CaseDetail {
   confidence_score: number;
   reporter_notes?: string;
   safe_recommendations: string[];
+  source_language?: string;
+  language_confidence?: number;
+  translations?: Record<string, string>;
+  owner_id?: number | null;
   created_at: string;
   updated_at: string;
   evidences: EvidenceItem[];
@@ -100,6 +104,9 @@ export interface SubmissionResponse {
   confidence_score: number;
   indicators: DetectionIndicator[];
   safe_recommendations: string[];
+  source_language?: string;
+  language_confidence?: number;
+  translations?: Record<string, string>;
   created_at: string;
 }
 
@@ -132,7 +139,8 @@ export interface UserProfile {
   username: string;
   email: string;
   full_name: string;
-  role: 'analyst' | 'admin';
+  role: 'user' | 'analyst' | 'admin';
+  preferred_language?: string;
   is_active: boolean;
   created_at: string;
 }

@@ -27,5 +27,9 @@ class SubmissionResponse(BaseModel):
     confidence_score: float
     indicators: List[DetectionIndicatorSchema]
     safe_recommendations: List[str]
+    source_language: str = "en"
+    language_confidence: float = 1.0
+    translations: Dict[str, str] = {}
     created_at: datetime
+
 

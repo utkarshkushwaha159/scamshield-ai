@@ -1,5 +1,5 @@
 import json
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -19,7 +19,8 @@ from app.schemas.case import (
     EvidenceSchema
 )
 from app.schemas.detection import DetectionIndicatorSchema
-from app.services.auth_service import require_analyst, get_current_user
+from app.services.auth_service import require_analyst, get_current_user_optional, get_current_user
+from app.services.translation_service import translate_evidence_text
 
 router = APIRouter(prefix="/api/cases", tags=["Case Management"])
 
@@ -32,8 +33,8 @@ PERMITTED_STATUSES = {
     "closed_resolved",
 }
 
-def parse_case_detail(case: Case) -> CaseDetail:
-    """Helper to convert Case model into validated CaseDetail schema with parsed JSON fields."""
+def parse_case_detail(case: Case, db: Session) -> CaseDetail:
+    """Helper to convert Case model into validated CaseDetail schema with parsed JSON fields and translations."""
     safe_recs = []
     if case.safe_recommendations:
         try:
@@ -42,7 +43,9 @@ def parse_case_detail(case: Case) -> CaseDetail:
             safe_recs = [case.safe_recommendations]
 
     parsed_evidences = []
+    all_raw_text_parts = []
     for ev in case.evidences:
+        all_raw_text_parts.append(ev.raw_content)
         extracted = None
         metadata = None
         if ev.extracted_entities:
@@ -65,6 +68,13 @@ def parse_case_detail(case: Case) -> CaseDetail:
             source_metadata=metadata,
             created_at=ev.created_at,
         ))
+
+    combined_text = "\n\n".join(all_raw_text_parts)
+    translations: Dict[str, str] = {}
+    src_lang = case.source_language or "en"
+    translations["en"] = translate_evidence_text(db, combined_text, src_lang, "en")
+    translations["hi"] = translate_evidence_text(db, combined_text, src_lang, "hi")
+    translations["bn"] = translate_evidence_text(db, combined_text, src_lang, "bn")
 
     parsed_indicators = [
         DetectionIndicatorSchema.model_validate(ind) for ind in case.indicators
@@ -89,6 +99,10 @@ def parse_case_detail(case: Case) -> CaseDetail:
         confidence_score=case.confidence_score,
         reporter_notes=case.reporter_notes,
         safe_recommendations=safe_recs,
+        source_language=src_lang,
+        language_confidence=case.language_confidence or 1.0,
+        translations=translations,
+        owner_id=case.owner_id,
         created_at=case.created_at,
         updated_at=case.updated_at,
         evidences=parsed_evidences,
@@ -104,12 +118,18 @@ def list_cases(
     search: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
     """
-    Lists submitted cases with filtering by status, risk category, or search term.
+    Lists submitted cases with role-aware privacy scopes:
+    - Standard USER sees only their own submitted cases.
+    - ANALYST and ADMIN see all cases across the platform.
     """
     query = db.query(Case)
+
+    if current_user and current_user.role.upper() == "USER":
+        query = query.filter(Case.owner_id == current_user.id)
 
     if status_filter:
         query = query.filter(Case.status == status_filter)
@@ -138,6 +158,8 @@ def list_cases(
             risk_score=c.risk_score,
             uncertainty_level=c.uncertainty_level,
             primary_threat_type=c.primary_threat_type,
+            source_language=c.source_language or "en",
+            owner_id=c.owner_id,
             indicator_count=len(c.indicators),
             evidence_count=len(c.evidences),
             created_at=c.created_at,
@@ -153,17 +175,84 @@ def get_case_by_reference(case_ref: str, db: Session = Depends(get_db)):
     case = db.query(Case).filter(Case.case_reference == case_ref.strip()).first()
     if not case:
         raise HTTPException(status_code=404, detail=f"Case with reference '{case_ref}' not found.")
-    return parse_case_detail(case)
+    return parse_case_detail(case, db)
 
 @router.get("/{case_id}", response_model=CaseDetail)
-def get_case_by_id(case_id: int, db: Session = Depends(get_db)):
+def get_case_by_id(
+    case_id: int,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
     """
-    Retrieves full details of a case by its internal database ID.
+    Retrieves full details of a case by its internal database ID with case ownership enforcement.
     """
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case:
         raise HTTPException(status_code=404, detail=f"Case ID {case_id} not found.")
-    return parse_case_detail(case)
+
+    if current_user and current_user.role.upper() == "USER" and case.owner_id is not None:
+        if case.owner_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied: You do not have permission to view this case.")
+
+    return parse_case_detail(case, db)
+
+@router.delete("/{case_id}", status_code=status.HTTP_200_OK)
+def delete_case(
+    case_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Deletes a case under privacy-by-design user data deletion rights.
+    Users can delete their own cases; Administrators can delete any case.
+    """
+    case = db.query(Case).filter(Case.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found.")
+
+    is_owner = (case.owner_id == current_user.id)
+    is_admin = (current_user.role.upper() == "ADMIN")
+
+    if not is_owner and not is_admin:
+        raise HTTPException(status_code=403, detail="Permission denied: You can only delete your own submitted cases.")
+
+    case_ref = case.case_reference
+    db.delete(case)
+
+    audit = AuditEvent(
+        action_type="CASE_DELETED",
+        actor_username=current_user.username,
+        entity_type="case",
+        entity_id=case_ref,
+        details=f"Case {case_ref} permanently purged per user privacy request.",
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(audit)
+    db.commit()
+
+    return {"message": f"Case {case_ref} successfully deleted and permanently purged."}
+
+@router.patch("/{case_id}/language", response_model=CaseDetail)
+def update_case_language(
+    case_id: int,
+    language: str = Query(..., description="Target language code: en, hi, hinglish, bn, ta, te"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Allows manual source language correction on a case.
+    """
+    case = db.query(Case).filter(Case.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found.")
+
+    case.source_language = language.lower()
+    case.language_confidence = 1.0
+    case.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(case)
+
+    return parse_case_detail(case, db)
 
 @router.post("/{case_id}/notes", response_model=AnalystNoteResponse)
 def add_analyst_note(
@@ -188,7 +277,6 @@ def add_analyst_note(
     )
     db.add(note)
 
-    # Log audit event
     audit = AuditEvent(
         action_type="NOTE_ADDED",
         actor_username=current_analyst.username,
@@ -211,7 +299,7 @@ def update_case_status(
     db: Session = Depends(get_db)
 ):
     """
-    Transitions case status with a mandatory rationale. Requires authenticated analyst role.
+    Transitions case status with mandatory rationale. Requires authenticated analyst role.
     """
     case = db.query(Case).filter(Case.id == case_id).first()
     if not case:
@@ -228,7 +316,6 @@ def update_case_status(
     case.status = new_stat
     case.updated_at = datetime.now(timezone.utc)
 
-    # Record review action
     review = CaseReviewAction(
         case_id=case.id,
         actor_id=current_analyst.id,
@@ -240,7 +327,6 @@ def update_case_status(
     )
     db.add(review)
 
-    # Log audit event
     audit = AuditEvent(
         action_type="STATUS_UPDATED",
         actor_username=current_analyst.username,
@@ -253,4 +339,4 @@ def update_case_status(
     db.commit()
     db.refresh(case)
 
-    return parse_case_detail(case)
+    return parse_case_detail(case, db)

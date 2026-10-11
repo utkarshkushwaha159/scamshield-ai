@@ -15,11 +15,17 @@ from app.engine.rules import evaluate_rules
 from app.engine.scorer import calculate_score_and_assessment
 from app.engine.correlator import correlate_case_with_corpus
 
+from app.services.threat_intel_service import seed_threat_intel_feeds
+from app.services.translation_service import detect_language
+
 def seed_database(db: Session):
     """
-    Seeds default administrative users, analysts, and realistic financial scam cases.
+    Seeds default administrative users, analysts, threat intelligence feeds, and realistic cases.
     """
-    # 1. Seed Users if not present
+    # 1. Seed Threat Intelligence blocklists
+    seed_threat_intel_feeds(db)
+
+    # 2. Seed Users if not present
     admin = db.query(User).filter(User.username == "admin").first()
     if not admin:
         admin = User(
@@ -27,7 +33,8 @@ def seed_database(db: Session):
             email="admin@scamshield.local",
             full_name="System Administrator",
             hashed_password=hash_password("Admin@ScamShield2026!"),
-            role="admin",
+            role="ADMIN",
+            preferred_language="en",
             is_active=True
         )
         db.add(admin)
@@ -39,12 +46,14 @@ def seed_database(db: Session):
             email="analyst@scamshield.local",
             full_name="Senior Fraud Investigator",
             hashed_password=hash_password("Analyst@ScamShield2026!"),
-            role="analyst",
+            role="ANALYST",
+            preferred_language="en",
             is_active=True
         )
         db.add(analyst)
 
     db.commit()
+
 
     # If cases already exist, skip case seeding
     if db.query(Case).count() > 0:
@@ -107,6 +116,14 @@ def seed_database(db: Session):
             "text": "GPay support team: You won cashback of Rs 2,000. Accept collect request sent to your UPI app and enter MPIN to claim cash directly. Transfer sent from refund.officer98@ybl.",
             "notes": "Shares the exact same VPA as case SCAM-2026-8812.",
             "status": "in_investigation"
+        },
+        {
+            "ref": "SCAM-2026-6204",
+            "title": "Multilingual WhatsApp Bank Account Suspension Pretext (Hinglish)",
+            "evidence_type": "sms",
+            "text": "Mujhe WhatsApp par message aaya ki mera bank account band ho jayega. Turant sampark karein aur kyc update karein http://bit.ly/hdfc-kyc-verify par.",
+            "notes": "Original text preserved in Hinglish. Demands urgent action under account freeze threat.",
+            "status": "pending_review"
         }
     ]
 
@@ -115,6 +132,8 @@ def seed_database(db: Session):
         entities = extract_entities(normalized)
         rule_matches = evaluate_rules(normalized, entities)
         assessment = calculate_score_and_assessment(rule_matches, normalized, entities)
+
+        detected_lang, lang_conf = detect_language(item["text"])
 
         case = Case(
             case_reference=item["ref"],
@@ -128,9 +147,12 @@ def seed_database(db: Session):
             confidence_score=assessment["confidence_score"],
             reporter_notes=item["notes"],
             safe_recommendations=json.dumps(assessment["safe_recommendations"]),
+            source_language=detected_lang,
+            language_confidence=lang_conf,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
+
         db.add(case)
         db.flush()
 

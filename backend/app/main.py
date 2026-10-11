@@ -13,7 +13,9 @@ from app.routers import (
     graph_router,
     auth_router,
     admin_router,
+    websocket_router,
 )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -62,6 +64,8 @@ app.include_router(cases_router)
 app.include_router(graph_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(websocket_router)
+
 
 @app.get("/")
 def root():

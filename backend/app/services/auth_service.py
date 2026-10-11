@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.user import User
+from app.services.firebase_service import verify_firebase_id_token
 
 security = HTTPBearer(auto_error=False)
 
@@ -20,6 +21,8 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifies a plain password against the stored salt:hash."""
+    if not hashed_password or ":" not in hashed_password:
+        return False
     try:
         salt, key_hex = hashed_password.split(":")
         test_key = hashlib.pbkdf2_hmac('sha256', plain_password.encode('utf-8'), salt.encode('utf-8'), 100000)
@@ -40,32 +43,62 @@ def decode_token(token: str) -> Optional[dict]:
     except Exception:
         return None
 
+def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db)
+) -> Optional[User]:
+    """Returns current user if token provided, otherwise None (for voluntary anonymous submissions)."""
+    if not credentials or not credentials.credentials:
+        return None
+    token = credentials.credentials
+
+    # 1. Check if token is a Firebase ID Token
+    fb_claims = verify_firebase_id_token(token)
+    if fb_claims:
+        uid = fb_claims.get("uid")
+        email = fb_claims.get("email", f"{uid}@firebase.user")
+        name = fb_claims.get("name", "Firebase User")
+        user = db.query(User).filter(User.firebase_uid == uid).first()
+        if not user:
+            # Provision new Firebase user with default USER role
+            user = User(
+                username=email.split("@")[0],
+                email=email,
+                firebase_uid=uid,
+                full_name=name,
+                role="USER",
+                is_active=True,
+                preferred_language="en"
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        return user
+
+    # 2. Check internal JWT token
+    payload = decode_token(token)
+    if payload and "sub" in payload:
+        username = payload["sub"]
+        return db.query(User).filter(User.username == username, User.is_active == True).first()
+
+    return None
+
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
-    if not credentials or not credentials.credentials:
+    user = get_current_user_optional(credentials, db)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication credentials required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token = credentials.credentials
-    payload = decode_token(token)
-    if not payload or "sub" not in payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired authentication token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    username = payload["sub"]
-    user = db.query(User).filter(User.username == username, User.is_active == True).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User account not found or disabled")
     return user
 
 def require_analyst(user: User = Depends(get_current_user)) -> User:
-    if user.role not in ["analyst", "admin"]:
+    normalized_role = user.role.upper()
+    if normalized_role not in ["ANALYST", "ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Analyst privileges required for this action"
@@ -73,7 +106,7 @@ def require_analyst(user: User = Depends(get_current_user)) -> User:
     return user
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
-    if user.role != "admin":
+    if user.role.upper() != "ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Administrator privileges required for this action"

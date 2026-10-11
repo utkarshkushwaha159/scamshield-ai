@@ -26,6 +26,14 @@ def db_session_setup():
     Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture
+def db_session(db_session_setup):
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@pytest.fixture
 def client(db_session_setup):
     def override_get_db():
         db = TestingSessionLocal()
