@@ -52,7 +52,13 @@ def get_current_user_optional(
         return None
     token = credentials.credentials
 
-    # 1. Check if token is a Firebase ID Token
+    # 1. Check internal JWT token (fast local verification)
+    payload = decode_token(token)
+    if payload and "sub" in payload:
+        username = payload["sub"]
+        return db.query(User).filter(User.username == username, User.is_active == True).first()
+
+    # 2. Check if token is a direct Firebase ID Token
     fb_claims = verify_firebase_id_token(token)
     if fb_claims:
         uid = fb_claims.get("uid")
@@ -74,12 +80,6 @@ def get_current_user_optional(
             db.commit()
             db.refresh(user)
         return user
-
-    # 2. Check internal JWT token
-    payload = decode_token(token)
-    if payload and "sub" in payload:
-        username = payload["sub"]
-        return db.query(User).filter(User.username == username, User.is_active == True).first()
 
     return None
 

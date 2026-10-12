@@ -2,18 +2,16 @@ import React from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Shield, ShieldAlert, Network, History, Lock, User, LogOut, Settings, PhoneCall, Globe } from 'lucide-react';
-import { getStoredUser, setAuthToken, setStoredUser } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export const Header: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const currentUser = getStoredUser();
+  const { user: currentUser, logout } = useAuth();
 
-  const handleLogout = () => {
-    setAuthToken(null);
-    setStoredUser(null);
+  const handleLogout = async () => {
+    await logout();
     navigate('/');
-    window.location.reload();
   };
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -104,7 +102,7 @@ export const Header: React.FC = () => {
             <Lock size={16} />
             {t('nav.analyst')}
           </NavLink>
-          {currentUser?.role === 'admin' && (
+          {currentUser?.role?.toLowerCase() === 'admin' && (
             <NavLink to="/admin" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
               <Settings size={16} />
               {t('nav.admin')}

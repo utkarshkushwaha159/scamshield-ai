@@ -139,7 +139,7 @@ export interface UserProfile {
   username: string;
   email: string;
   full_name: string;
-  role: 'user' | 'analyst' | 'admin';
+  role: 'user' | 'analyst' | 'admin' | 'USER' | 'ANALYST' | 'ADMIN' | string;
   preferred_language?: string;
   is_active: boolean;
   created_at: string;

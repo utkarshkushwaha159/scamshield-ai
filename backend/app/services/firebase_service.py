@@ -11,18 +11,21 @@ try:
     from firebase_admin import credentials, auth as firebase_auth
 
     cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
-    if cred_path and os.path.exists(cred_path):
-        cred = credentials.Certificate(cred_path)
-        firebase_admin.initialize_app(cred)
-        FIREBASE_INITIALIZED = True
-        logger.info("Firebase Admin SDK successfully initialized from credentials file.")
-    elif os.getenv("FIREBASE_PROJECT_ID"):
-        # Application Default Credentials / Project initialization
-        firebase_admin.initialize_app()
-        FIREBASE_INITIALIZED = True
-        logger.info("Firebase Admin SDK initialized using default credentials.")
+    project_id = os.getenv("FIREBASE_PROJECT_ID")
+    if not firebase_admin._apps:
+        if cred_path and os.path.exists(cred_path):
+            cred = credentials.Certificate(cred_path)
+            firebase_admin.initialize_app(cred)
+            FIREBASE_INITIALIZED = True
+            logger.info("Firebase Admin SDK successfully initialized from credentials file.")
+        elif project_id:
+            firebase_admin.initialize_app(options={"projectId": project_id})
+            FIREBASE_INITIALIZED = True
+            logger.info(f"Firebase Admin SDK initialized with project ID '{project_id}'.")
+        else:
+            logger.info("Firebase credentials not configured. Operating in modular fallback dev mode.")
     else:
-        logger.info("Firebase credentials not configured. Operating in modular fallback dev mode.")
+        FIREBASE_INITIALIZED = True
 except Exception as e:
     logger.warning(f"Firebase Admin SDK initialization skipped or failed: {e}")
 

@@ -1,16 +1,35 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Lock, User, KeyRound, AlertCircle, Sparkles, Loader2 } from 'lucide-react';
-import { api, setAuthToken, setStoredUser } from '../services/api';
-import { signInWithGoogle, isFirebaseConfigured } from '../services/firebase';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Lock, User, KeyRound, AlertCircle, Sparkles, Loader2, CheckCircle2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { loginWithGoogle, loginWithCredentials, isFirebaseConfigured } = useAuth();
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const redirectAfterLogin = (role: string) => {
+    const from = (location.state as any)?.from;
+    if (from && from !== '/login') {
+      navigate(from, { replace: true });
+      return;
+    }
+    const normalized = role.toLowerCase();
+    if (normalized === 'admin') {
+      navigate('/admin', { replace: true });
+    } else if (normalized === 'analyst') {
+      navigate('/analyst', { replace: true });
+    } else {
+      navigate('/', { replace: true });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,24 +37,9 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      const resp = await api.login(username.trim(), password);
-      setAuthToken(resp.access_token);
-      setStoredUser({
-        id: resp.user_id,
-        username: resp.username,
-        email: `${resp.username}@scamshield.local`,
-        full_name: resp.full_name,
-        role: resp.role,
-        is_active: true,
-        created_at: new Date().toISOString(),
-      });
-
-      if (resp.role === 'admin') {
-        navigate('/admin');
-      } else {
-        navigate('/analyst');
-      }
-      window.location.reload();
+      const profile = await loginWithCredentials(username, password);
+      setSuccessMsg(`Welcome, ${profile.full_name || profile.username}! Redirecting...`);
+      setTimeout(() => redirectAfterLogin(profile.role), 300);
     } catch (err: any) {
       setError(err.message || 'Login failed. Please verify credentials.');
     } finally {
@@ -46,32 +50,25 @@ export const LoginPage: React.FC = () => {
   const handleGoogleSignIn = async () => {
     setError(null);
     if (!isFirebaseConfigured) {
-      setError('Firebase is not yet configured in .env. Please configure VITE_FIREBASE_API_KEY or use the hackathon demo credentials below.');
+      setError('Firebase is not yet configured with valid credentials in frontend/.env. You can also sign in with the hackathon demo credentials below.');
       return;
     }
 
     setGoogleLoading(true);
     try {
-      const res = await signInWithGoogle();
-      if (!res) throw new Error('Sign-in cancelled or returned empty.');
-
-      // Exchange Firebase ID Token with backend
-      const backendResp = await api.firebaseLogin(res.token);
-      setAuthToken(backendResp.access_token);
-      setStoredUser({
-        id: backendResp.user_id,
-        username: backendResp.username,
-        email: backendResp.email,
-        full_name: backendResp.full_name,
-        role: backendResp.role,
-        is_active: true,
-        created_at: new Date().toISOString(),
-      });
-
-      navigate(backendResp.role === 'admin' ? '/admin' : '/analyst');
-      window.location.reload();
+      const profile = await loginWithGoogle();
+      setSuccessMsg(`Authenticated via Google as ${profile.full_name || profile.username}! Redirecting...`);
+      setTimeout(() => redirectAfterLogin(profile.role), 300);
     } catch (err: any) {
-      setError(err.message || 'Firebase Google Sign-In failed.');
+      let message = err.message || 'Firebase Google Sign-In failed.';
+      if (err.code === 'auth/popup-closed-by-user') {
+        message = 'Sign-in popup was closed before completing authentication.';
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        message = 'Multiple popup requests initiated. Please try again.';
+      } else if (err.code === 'auth/unauthorized-domain') {
+        message = 'This domain is not authorized in Firebase Console (Authentication > Settings > Authorized domains).';
+      }
+      setError(message);
     } finally {
       setGoogleLoading(false);
     }
@@ -103,10 +100,10 @@ export const LoginPage: React.FC = () => {
             <Lock size={22} />
           </div>
           <h1 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '0.25rem' }}>
-            Privileged Analyst Portal
+            Privileged Portal Login
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-            Role-Based Access Control (USER, ANALYST, ADMIN) with verified token authentication.
+            Secure Firebase Authentication and Role-Based Access Control (USER, ANALYST, ADMIN).
           </p>
         </div>
 
@@ -115,7 +112,7 @@ export const LoginPage: React.FC = () => {
           <button
             type="button"
             onClick={handleGoogleSignIn}
-            disabled={googleLoading}
+            disabled={googleLoading || loading}
             className="btn btn-outline"
             style={{
               width: '100%',
@@ -142,13 +139,13 @@ export const LoginPage: React.FC = () => {
             <span>Sign in with Google (Firebase)</span>
           </button>
           <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
-            New Google accounts default to USER role. Elevated roles require admin grant.
+            New Google accounts default to the USER role. Elevated roles require admin grant.
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
           <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-subtle)' }} />
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>OR LOCAL VERIFIED LOGIN</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>OR LOCAL VERIFIED CREDENTIALS</span>
           <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-subtle)' }} />
         </div>
 
@@ -185,6 +182,13 @@ export const LoginPage: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {successMsg && (
+          <div className="notice notice-success" style={{ marginBottom: '1.25rem', padding: '0.65rem 0.85rem', fontSize: '0.825rem' }}>
+            <CheckCircle2 size={15} style={{ flexShrink: 0 }} />
+            <span>{successMsg}</span>
+          </div>
+        )}
 
         {error && (
           <div className="notice notice-danger" style={{ marginBottom: '1.25rem', padding: '0.65rem 0.85rem', fontSize: '0.825rem' }}>
@@ -238,7 +242,7 @@ export const LoginPage: React.FC = () => {
             type="submit"
             className="btn btn-primary"
             style={{ width: '100%', padding: '0.7rem' }}
-            disabled={loading}
+            disabled={loading || googleLoading}
           >
             {loading ? (
               <>
