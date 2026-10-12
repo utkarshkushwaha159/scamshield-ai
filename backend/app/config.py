@@ -30,6 +30,8 @@ class Settings(BaseModel):
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://frontend-lemon-five-27.vercel.app",
+        "https://scamshield-ai-navy-psi.vercel.app",
     ]
 
 settings = Settings()
